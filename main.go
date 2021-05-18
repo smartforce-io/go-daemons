@@ -4,22 +4,23 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
-	"flag"
+	"github.com/sevlyar/go-daemon"
 	"github.com/smartforce-io/go-daemons/hostinfo"
 	"log"
 	"net/http"
 	"os"
+	"runtime"
+	"time"
+)
+
+const (
+	ENV_URL = "GO_DAEMON_URL"
 )
 
 var (
-	url = ""
-
+	url              = ""
 	errWrongResponse = errors.New("a request returned wrong response")
 )
-
-func init() {
-	flag.StringVar(&url, "url", "", "a target url")
-}
 
 func sendHostInfo(info *hostinfo.HostInfo) error {
 	b, err := json.Marshal(info)
@@ -36,16 +37,7 @@ func sendHostInfo(info *hostinfo.HostInfo) error {
 	return nil
 }
 
-func main() {
-	log.Println("Go Daemons")
-
-	flag.Parse()
-
-	if len(url) == 0 {
-		log.Print("missing required argument `--url`\nRun --help")
-		os.Exit(2)
-	}
-
+func worker() {
 	info, err := hostinfo.Fetch()
 	if err != nil {
 		log.Fatal(err)
@@ -54,4 +46,56 @@ func main() {
 		log.Fatal(err)
 	}
 	log.Println("Host Info was sent correctly!")
+}
+
+func runner() {
+	ticker := time.NewTicker(time.Second * 1)
+	for {
+		select {
+		case <-ticker.C:
+			worker()
+		}
+	}
+}
+
+func runLinuxDaemon() {
+	cntxt := &daemon.Context{
+		PidFileName: "go-daemon.pid",
+		PidFilePerm: 0644,
+		LogFileName: "go-daemon.log",
+		LogFilePerm: 0640,
+		WorkDir:     "./",
+		Umask:       027,
+		Args:        []string{"[go-daemon sample]"},
+	}
+	d, err := cntxt.Reborn()
+	if err != nil {
+		log.Fatal("Unable to run: ", err)
+	}
+	if d != nil {
+		return
+	}
+	defer cntxt.Release()
+	log.Print("- - - - - - - - - - - - - - -")
+	log.Print("daemon started")
+	runner()
+}
+
+func main() {
+	log.Println("Go Daemons")
+
+	url = os.Getenv(ENV_URL)
+
+	if len(url) == 0 {
+		log.Printf("missing required environment variable %q", ENV_URL)
+		os.Exit(2)
+	}
+
+	switch runtime.GOOS {
+	case "linux":
+		log.Print("Running Linux Daemon")
+		runLinuxDaemon()
+	default:
+		log.Printf("This OS %q doesn't support yet.", runtime.GOOS)
+	}
 }
