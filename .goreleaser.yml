@@ -1,0 +1,31 @@
+project_name: go-daemons
+
+builds:
+  - id: godaemons
+    dir: .
+    main: ./main.go
+    binary: go-daemons
+    goos:
+      - linux
+      - windows
+    goarch:
+      - amd64
+
+archives:
+  - name_template: "{{ .ProjectName }}_{{ .Os }}__{{ .Arch }}"
+    builds:
+      - godaemons
+    replacements:
+      amd64: x86_64
+    format_overrides:
+      - goos: windows
+        format: zip
+
+checksum:
+  name_template: "checksums.txt"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - '^test'
